@@ -1,0 +1,23 @@
+# Python virtual environment
+venv/
+.venv/
+
+# Node dependencies (installed inside the Docker image by npm install)
+node_modules/
+npm-debug.log*
+
+# Qualitas Corpus data: several GB, too large for GitHub
+BigDataAnalytics/Data/*
+!BigDataAnalytics/Data/Place-Qualitas-Corpus-Here.txt
+*.tar
+*.zip
+
+# Logs and local environment settings
+*.log
+.env
+
+# Editor and OS files
+.vscode/
+.idea/
+.DS_Store
+*.swp
