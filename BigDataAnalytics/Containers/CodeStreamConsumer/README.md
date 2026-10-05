@@ -1,6 +1,8 @@
 # CodeStreamConsumer – Code Stream Clone Detector
+Team members: Dawood Rahimi & Ali Reza Sharifi
 
-Assignment: *Working with a Stream of Data* (Big Data Analytics, Applied Cloud Computing and Big Data, BTH).
+Assignment: *Working with a Stream of Data*
+Course: Big Data Analytics, Applied Cloud Computing and Big Data.
 
 This README describes how we implemented the two `TODO` tasks, how we tested them, the results of running the
 consumer on the Qualitas Corpus, and our analysis of those results.
@@ -8,7 +10,7 @@ consumer on the Qualitas Corpus, and our analysis of those results.
 **Scope.** As the assignment says, we only implemented the `TODO` parts:
 
 1. the three missing methods in `CloneDetector.js`
-2. the timing statistics page in `index.js`
+2. the timing statistics page in `index.js`, allowed to be a little creative in this part.
 
 We deliberately left the rest of the given code unchanged. Weaknesses we found in it are discussed in the
 analysis below instead of being fixed.
