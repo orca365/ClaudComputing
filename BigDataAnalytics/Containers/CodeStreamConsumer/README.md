@@ -1,9 +1,15 @@
 # CodeStreamConsumer – Code Stream Clone Detector
 
-Assignment: *Working with a Stream of Data* (Big Data Analytics, Applied Cloud Computing and Big Data, BTH).
+**Course:** Big Data Analytics, Applied Cloud Computing and Big Data, BTH
+**Assignment:** Working with a Stream of Data – Code Stream Clone Detector
+**Team:** Dawood Rahimi and Ali Reza Sharifi
+**Date:** 2026-10-05
 
-This README describes how we implemented the two `TODO` tasks, how we tested them, the results of running the
-consumer on the Qualitas Corpus, and our analysis of those results.
+This README is our report. It describes:
+
+- how we implemented the two `TODO` tasks and how we tested them
+- the results of running the consumer on the Qualitas Corpus, and our analysis of those results
+- our answers to the assignment questions (section 6)
 
 **Scope.** As the assignment says, we only implemented the `TODO` parts:
 
@@ -286,38 +292,80 @@ After 12:45 the page stayed at 27,554 files, but the consumer:
 
 ## 6. Answers to the assignment questions
 
-### Q1 – Can the entire Qualitas Corpus be processed?
+### Q1. Are you able to process the entire Qualitas Corpus? If not, why does the CodeStreamConsumer hang, and how can it be avoided?
 
-**No.** We processed 27,554 of 163,596 files (about 17 %) before the consumer hung. The main issues are:
+**No.** The consumer stopped making progress after 27,554 files, about 17 % of the corpus. After that it still
+answered HTTP requests, but it used 100 % CPU, its memory kept growing (heap 1,256 → 1,457 MB without any new
+file being processed), and **284,469 uploaded files (835 MB)** piled up unprocessed in `/tmp`.
 
-| Issue | Data processing / storage problem | How to avoid it |
-|---|---|---|
-| Everything is kept in memory | Every file, chunk and clone stays in the heap, growing about 21 KB per file | Store files, chunk hashes and clones in a database (MongoDB is already a dependency); keep only what is needed in memory |
-| Every file is compared with all earlier files | O(n) per file, O(n²) in total | Index chunk hashes (hash → locations) so a new chunk is looked up instead of compared with everything |
-| Shared upload object | Listeners pile up, concurrent uploads disturb each other, one error blocks all later uploads | Create a new `formidable()` per request, and handle errors |
-| Temp files are never deleted | 835 MB in `/tmp` | Delete the upload file after reading it |
-| No backpressure | The generator sends files faster than they can be processed | Put incoming files in a queue, and answer the generator only when a file has been processed (or rate-limit it) |
+The main issues, in terms of data processing and storage, are:
 
-### Q2 – How can the number of SourceLine comparisons be reduced?
+1. **Everything is stored in memory.** `FileStorage` keeps every file with all its chunks, and `CloneStorage`
+   keeps every clone. Nothing is released, so memory grows by about 21 KB per file. The whole corpus would need
+   about 3.5 GB of heap, which is around Node's default limit.
+2. **Each file is compared with all earlier files.** The work per file grows with the number of stored files, so
+   the consumer gets slower and slower and falls further behind the incoming stream.
+3. **Shared upload state.** One `formidable` form object is reused for every request:
+   - Each request adds listeners to it that are never removed (`MaxListenersExceededWarning`), which costs CPU and
+     memory.
+   - Concurrent uploads disturb each other, which caused the crash in the first run.
+   - After a single failed upload, the form never signals "end" again, so `processFile()` is never called. This is
+     the hang in the main run (section 5.4).
+4. **No cleanup and no backpressure.** Temp files are never deleted. The generator sends files regardless of
+   whether the consumer has processed them, so unprocessed data piles up.
 
-- **Stop at the first mismatch.** `#chunkMatch` currently compares all `CHUNKSIZE` lines even after a
-  difference has been found.
-- **Hash each chunk** once when it is created, for example with MD5 over its lines. Comparing two chunks is then
-  one comparison instead of `CHUNKSIZE`, and a hash also takes less memory than the `SourceLine` objects.
-- **Index the hashes** in a map (hash → list of file and line). A new chunk is then found with a lookup instead
-  of being compared with every chunk of every stored file. This removes most comparisons altogether.
+**How to avoid them:**
+- Store files, chunk hashes and clones in a **database** (MongoDB is already a dependency) instead of in memory.
+- Use a **hash index** of chunks (see Q2), so that a new file is not compared with every earlier file.
+- Create a **new `formidable()` object per request**, handle errors, and **delete each temp file** after reading
+  it.
+- Add a **queue / backpressure**: only accept or acknowledge a new file when the previous one has been processed.
 
-### Q3 – Trends in the processing time
+### Q2. Comparing two chunks implies CHUNKSIZE comparisons of SourceLines. What can be done to reduce the number of comparisons?
 
-The time per file **grows linearly with the number of files already processed**: about 20× longer at 20× as
-many files (section 5.1). The total for the whole stream is therefore quadratic. The reasons are:
+1. **Stop at the first mismatch.** Our `#chunkMatch` compares all lines even after a difference is found. Most
+   chunk pairs differ on the first line, so stopping there saves most of the work.
+2. **Hash each chunk** once, when it is created (for example MD5 of its normalised lines). Comparing two chunks is
+   then **one** comparison instead of `CHUNKSIZE`, and a short hash takes less memory than five `SourceLine`
+   objects.
+3. **Index the hashes** in a map (hash → list of file and line). Instead of comparing a new chunk with every chunk
+   of every stored file, we do a single lookup. This removes almost all comparisons, and turns the O(n) cost per
+   file into roughly constant time.
 
-- `matchDetect()` compares every new file with every stored file, and every chunk with every chunk.
-- `#expandCloneCandidates` and `#consolidateClones` search the accumulator for every clone, so they cost
-  O(k²) in the number of clones. Files with many clones cause the big spikes.
-- There is a fixed cost per stored file, even when nothing matches, which gives small files a floor of about
-  23 ms.
-- The heap keeps growing, so garbage-collection pauses get longer later in the run.
+### Q3. Do you see any trends in the time to process each file as the number of processed files grows? Why?
+
+**Yes. The time per file grows linearly with the number of files already processed.** With 20× as many files
+stored (1,366 → 27,554), the match time per file over the last 1000 files was also 20× longer (3.4 → 67.2 ms;
+section 5.1). The time-per-file chart rises steadily from about 5 ms to about 50–80 ms per file. If each file
+costs O(n), the whole stream costs **O(n²)**.
+
+Reasons in the algorithm:
+
+- **`matchDetect()` loops over every stored file**, and `#filterCloneCandidates` compares every chunk of the new
+  file with every chunk of the stored file. More stored files means proportionally more comparisons.
+- **There is a fixed cost per stored file**, because filter, expand and consolidate run for every stored file
+  even when nothing matches. This gives even a 30-line file a floor of about 23 ms at 27,000 stored files, and it
+  is why small files show a very high time per line.
+- **Expanding and consolidating cost O(k²) in the number of clones (k)**, because the accumulator is searched for
+  every clone. Files that share code with many earlier files produce many clones and take much longer. The two
+  biggest spikes (≈ 330 ms and ≈ 860 ms) occur exactly where the "clones found" chart jumps.
+- **The heap grows constantly**, so garbage-collection pauses become longer and more frequent. This gives
+  irregular spikes later in the run.
+- **Clones grow faster than files** (65× against 20×). The more files are stored, the more likely a new file
+  matches one of them, which adds to the expand and consolidate cost.
+
+**What this implies:** the cost per file depends on how many files are stored, not on the file's own size. The
+design does not scale to a stream, because it needs an index instead of comparing each file with all earlier
+ones.
+
+### Q4. Code
+
+The zip contains the whole `Containers/CodeStreamConsumer` folder (without `node_modules`). Our changes are in:
+
+- `src/CloneDetector.js`: `#filterCloneCandidates`, `#expandCloneCandidates`, `#consolidateClones` (section 2)
+- `src/index.js`: timer history and the `/timers` page (section 3)
+- `test-filter.js`: our tests (`node test-filter.js`)
+- `README.md` (this report) and `screenshots/`
 
 ---
 
