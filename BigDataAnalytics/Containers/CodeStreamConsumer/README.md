@@ -1,19 +1,9 @@
 # CodeStreamConsumer – Code Stream Clone Detector
 
-<<<<<<< HEAD
-**Course:** Applied Cloud Computing and Big Data
-
-**Assignment:** Working with a Stream of Data
-
-**Team:** Dawood Rahimi and Ali Reza Sharifi
-
-**Date:** 2026-10-05
-=======
-**Course:** Applied Cloud Computing and Big Data.
-**Assignment:** Working with a Stream of Data.
-**Team:** Dawood Rahimi and Ali Reza Sharifi.
-**Date:** 2026-10-05.
->>>>>>> 8ad906b445da4afc419e598912e313c407a38d78
+**Course:** Applied Cloud Computing and Big Data.  
+**Assignment:** Working with a Stream of Data.  
+**Team:** Dawood Rahimi and Ali Reza Sharifi.  
+**Date:** 2026-10-05.  
 
 This README is our report. It describes:
 
