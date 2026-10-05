@@ -1,7 +1,7 @@
 # CodeStreamConsumer – Code Stream Clone Detector
 
-**Course:** Big Data Analytics, Applied Cloud Computing and Big Data, BTH
-**Assignment:** Working with a Stream of Data – Code Stream Clone Detector
+**Course:** Applied Cloud Computing and Big Data
+**Assignment:** Working with a Stream of Data
 **Team:** Dawood Rahimi and Ali Reza Sharifi
 **Date:** 2026-10-05
 
