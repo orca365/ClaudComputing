@@ -8,8 +8,12 @@
 (def source-dir (or (System/getenv "SOURCEDIR") "/tmp"))
 (def source-type #".*\.java")
 
+;; A2 also store timestamp and message in the database (statusUpdates)
 (defn ts-println [& args]
-  (println (.toString (java.time.LocalDateTime/now)) args))
+  (let [timestamp (java.util.Date.)
+        message (string/join " " args)]
+    (println (.toString (.toInstant timestamp)) message)
+    (storage/addUpdate! timestamp message)))
 
 (defn maybe-clear-db [args]
   (when (some #{"CLEAR"} (map string/upper-case args))

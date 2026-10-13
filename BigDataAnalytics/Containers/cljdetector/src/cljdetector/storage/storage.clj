@@ -8,7 +8,9 @@
 (def dbname "cloneDetector")
 (def partition-size 100)
 (def hostname (or (System/getenv "DBHOST") DEFAULT-DBHOST))
-(def collnames ["files"  "chunks" "candidates" "clones"])
+;; A2  statusUpdates added so it is also cleared and counted
+;;  Before adding the statusUpdates status messages only go to the terminal. A separate container which is the MonitorTool can't read another container's terminal but it can read the database
+(def collnames ["files"  "chunks" "candidates" "clones" "statusUpdates"])
 
 (defn print-statistics []
   (let [conn (mg/connect {:host hostname})        
@@ -26,6 +28,13 @@
   (let [conn (mg/connect {:host hostname})        
         db (mg/get-db conn dbname)]
     (mc/count db collname)))
+
+;; A2 store each status message so a separate monitor can follow progress
+(defn addUpdate! [timestamp message]
+  (let [conn (mg/connect {:host hostname})
+        db (mg/get-db conn dbname)]
+    (mc/insert db "statusUpdates" {:timestamp timestamp :message message})
+    (mg/disconnect conn)))
 
 (defn store-files! [files]
   (let [conn (mg/connect {:host hostname})        
