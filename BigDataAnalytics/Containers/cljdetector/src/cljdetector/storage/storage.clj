@@ -36,14 +36,24 @@
     (mc/insert db "statusUpdates" {:timestamp timestamp :message message})
     (mg/disconnect conn)))
 
+;; A2 read each file on its own, so one unreadable file no longer drops its whole batch of 100,
+;; and report failures instead of silently ignoring them
+(defn read-file [file]
+  (try {:fileName (.getPath file) :contents (slurp file)}
+       (catch Exception e
+         (println "Could not read" (.getPath file) "-" (.getMessage e))
+         nil)))
+
 (defn store-files! [files]
-  (let [conn (mg/connect {:host hostname})        
+  (let [conn (mg/connect {:host hostname})
         db (mg/get-db conn dbname)
         collname "files"
         file-parted (partition-all partition-size files)]
     (doseq [file-group file-parted]
-      (try (mc/insert-batch db collname (map (fn [%] {:fileName (.getPath %) :contents (slurp %)}) file-group))
-         (catch Exception e [])))))
+      (let [documents (keep read-file file-group)]
+        (try (when (seq documents) (mc/insert-batch db collname documents))
+             (catch Exception e
+               (println "Could not store" (count documents) "files -" (.getMessage e))))))))
 
 (defn store-chunks! [chunks]
   (let [conn (mg/connect {:host hostname})        
@@ -147,6 +157,17 @@
   (let [db (mg/get-db conn dbname)
         collname "candidates"]
       (mc/remove db collname {:_id {$in (map #(:_id %) candidates)}})))
+
+;; A2 pause/resume: the MonitorTool asks for a pause by inserting {_id: "pause"} into the control collection
+(defn pause-requested? [conn]
+  (let [db (mg/get-db conn dbname)]
+    (some? (mc/find-one db "control" {:_id "pause"}))))
+
+(defn clear-pause-request! []
+  (let [conn (mg/connect {:host hostname})
+        db (mg/get-db conn dbname)]
+    (mc/remove db "control" {:_id "pause"})
+    (mg/disconnect conn)))
 
 (defn store-clone! [conn clone]
   (let [db (mg/get-db conn dbname)

@@ -21,6 +21,8 @@ const PHASES = [
     ['Storing chunks', 'storing chunks'],
     ['Identifying Clone Candidates', 'identifying candidates'],
     ['Expanding Candidates', 'expanding'],
+    ['Paused expansion', 'paused'],
+    ['Resuming expansion', 'expanding'],
     ['Consolidating and listing clones', 'listing'],
     ['Summary', 'done'],
 ];
@@ -43,7 +45,10 @@ async function readNewStatusUpdates() {
         .toArray();
 
     for (let update of newUpdates) {
-        if (update.message.startsWith('Reading and Processing files')) {
+        // A new run starts with reading files, or with any phase after a finished run (e.g. a NoRead run)
+        let newRun = update.message.startsWith('Reading and Processing files')
+            || (phaseOf(update.message) && currentPhase() === 'done');
+        if (newRun) {
             startNewRun();
         }
         statusUpdates.push(update);
@@ -107,13 +112,15 @@ function createCsvFile() {
 
 // Statistics
 // --------------------
-// One interval per pair of consecutive samples: how long it took and how much each count changed
+// One interval per pair of consecutive samples: how long it took and how much each count changed.
+// An interval where the phase changed mixes two phases, so it is marked 'transition' and left out of the statistics.
 function intervals() {
     let result = [];
     for (let i = 1; i < samples.length; i++) {
         let before = samples[i - 1];
         let after = samples[i];
-        let interval = { phase: after.phase, seconds: (after.time - before.time) / 1000, after: after };
+        let phase = before.phase === after.phase ? after.phase : 'transition';
+        let interval = { phase: phase, seconds: (after.time - before.time) / 1000, after: after };
         for (let name of COLLECTIONS) {
             interval[name] = after[name] - before[name];
         }
@@ -189,10 +196,7 @@ function expansionForecast() {
     let candidatesPerClone = (candidatesAtStart - last.candidates) / last.clones;
     let remainingClones = last.candidates / candidatesPerClone;
 
-    // The last 30 intervals, skipping the one where the candidates first appeared (their count went up)
-    let recent = intervals()
-        .filter(interval => interval.phase === 'expanding' && interval.candidates <= 0)
-        .slice(-30);
+    let recent = intervals().filter(interval => interval.phase === 'expanding').slice(-30);
     let seconds = recent.reduce((sum, interval) => sum + interval.seconds, 0);
     let clones = recent.reduce((sum, interval) => sum + interval.clones, 0);
     let candidatesUsed = -recent.reduce((sum, interval) => sum + interval.candidates, 0);
@@ -219,6 +223,17 @@ app.get('/', async (req, res) => {
     }
 });
 
+// Ask cljDetector to pause: it checks for this document before expanding each candidate
+app.post('/pause', async (req, res) => {
+    try {
+        await db.collection('control').updateOne({ _id: 'pause' }, { $set: { requested: new Date() } }, { upsert: true });
+        console.log('Pause requested');
+        res.redirect('/');
+    } catch (err) {
+        res.status(500).send('Could not request pause: ' + err.message);
+    }
+});
+
 app.get('/samples.csv', (req, res) => {
     if (!csvFile) return res.status(404).send('No samples yet');
     res.sendFile(csvFile);
@@ -242,6 +257,12 @@ async function buildPage() {
     page += '</head><body><h1>cljDetector Monitor</h1>';
     page += '<p>Phase: <b>' + last.phase + '</b>. Sampling every ' + SAMPLE_SECONDS + ' s, ' + samples.length + ' samples. '
         + '<a href="/samples.csv">Raw samples (CSV)</a>. Page refreshes every ' + REFRESH_SECONDS + ' s.</p>';
+    if (last.phase === 'expanding') {
+        page += '<form method="post" action="/pause"><button>Pause expansion</button></form>';
+    }
+    if (last.phase === 'paused') {
+        page += '<p>Paused. Resume with: <code>docker compose -f all-at-once.yaml run -d clone-detector resume</code></p>';
+    }
 
     page += '<h2>Counts and averages</h2><table>';
     for (let name of COLLECTIONS) {
