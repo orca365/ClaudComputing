@@ -61,9 +61,14 @@
         (recur (storage/get-overlapping-candidates dbconnection merged-clone)
                merged-clone)))))
 
+;; A2 pause/resume: before expanding the next candidate, check whether a pause was requested.
+;; Returns :done when no candidates are left, or :paused.
 (defn expand-clones []
   (let [dbconnection (storage/get-dbconnection)]
     (loop [candidate (storage/get-one-candidate dbconnection)]
-      (when candidate
-        (storage/store-clone! dbconnection (maybe-expand dbconnection candidate))
-        (recur (storage/get-one-candidate dbconnection))))))
+      (cond
+        (nil? candidate) :done
+        (storage/pause-requested? dbconnection) :paused
+        :else (do
+                (storage/store-clone! dbconnection (maybe-expand dbconnection candidate))
+                (recur (storage/get-one-candidate dbconnection)))))))

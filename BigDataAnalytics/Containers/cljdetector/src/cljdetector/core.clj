@@ -32,13 +32,25 @@
       (ts-println "Storing chunks of size" chunk-size "...")
       (storage/store-chunks! chunks))))
 
+;; A2 pause/resume: run the expansion and report a pause; returns :done or :paused
+(defn run-expansion []
+  (storage/clear-pause-request!)
+  (let [result (expander/expand-clones)]
+    (when (= result :paused)
+      (ts-println "Paused expansion," (storage/count-items "candidates") "candidates left"))
+    result))
+
+(defn resume-expansion []
+  (ts-println "Resuming expansion," (storage/count-items "candidates") "candidates left")
+  (run-expansion))
+
 (defn maybe-detect-clones [args]
   (when-not (some #{"NOCLONEID"} (map string/upper-case args))
     (ts-println "Identifying Clone Candidates...")
     (storage/identify-candidates!)
     (ts-println "Found" (storage/count-items "candidates") "candidates")
     (ts-println "Expanding Candidates...")
-    (expander/expand-clones)))
+    (run-expansion)))
 
 (defn pretty-print [clones]
   (doseq [clone clones]
@@ -60,12 +72,17 @@
    - Clear clears the database
    - NoRead do not read the files again
    - NoCloneID do not detect clones
-   - List print a list of all clones"
+   - List print a list of all clones
+   - Resume continue a paused expansion (A2)"
   [& args]
 
-  (maybe-clear-db args)
-  (maybe-read-files args)
-  (maybe-detect-clones args)
-  (maybe-list-clones args)
-  (ts-println "Summary")
-  (storage/print-statistics))
+  ;; A2 pause/resume: Resume skips straight to the expansion; a paused run stops without a Summary
+  (let [expansion (if (some #{"RESUME"} (map string/upper-case args))
+                    (resume-expansion)
+                    (do (maybe-clear-db args)
+                        (maybe-read-files args)
+                        (maybe-detect-clones args)))]
+    (when-not (= expansion :paused)
+      (maybe-list-clones args)
+      (ts-println "Summary")
+      (storage/print-statistics))))

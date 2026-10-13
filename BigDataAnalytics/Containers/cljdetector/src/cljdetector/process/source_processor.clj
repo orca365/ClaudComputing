@@ -47,5 +47,7 @@
 (defn chunkify [chunkSize files]
   (map #(chunkify-file chunkSize %) files))
 
+;; A2 only regular files: folders whose name ends in .java (e.g. netbeans src/api.java) passed the
+;; name filter and made store-files! drop their whole batch of 100 files
 (defn traverse-directory [path pattern]
-  (filter #(re-matches pattern (.getName %)) (file-seq (file path))))
+  (filter #(and (.isFile %) (re-matches pattern (.getName %))) (file-seq (file path))))
