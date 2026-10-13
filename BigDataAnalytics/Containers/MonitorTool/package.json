@@ -1,0 +1,14 @@
+{
+  "name": "monitortool",
+  "version": "1.0.0",
+  "description": "Monitors the progress of cljDetector by sampling its MongoDB database",
+  "private": true,
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "mongodb": "^6.10.0"
+  }
+}

@@ -28,7 +28,20 @@ services:
     volumes:
       - dbstorage:/data/db
       - dbconfig:/data/configdb
-    
+
+  # A2 MonitorTool: samples the database while cljDetector runs, page on http://localhost:8081
+  monitor:
+    image: monitortool
+    depends_on:
+      - dbstorage
+    ports:
+      - 8081:3000
+    volumes:
+      - ./Containers/MonitorTool/data:/app/data
+    environment:
+      DBHOST: dbstorage
+      SAMPLE_SECONDS: 10
+
 volumes:
   dbstorage:
   dbconfig:

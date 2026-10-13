@@ -12,6 +12,10 @@ BigDataAnalytics/Data/*
 *.tar
 *.zip
 
+# MonitorTool samples: test runs stay local, the final run's CSV is copied into the report
+BigDataAnalytics/Containers/MonitorTool/data/*
+!BigDataAnalytics/Containers/MonitorTool/data/.gitkeep
+
 # Logs and local environment settings
 *.log
 .env
